@@ -12,6 +12,7 @@ public class Chat extends UnicastRemoteObject implements ChatInterface {
 	}
 
 	public void ackJoin(int peerID) throws RemoteException {  // Acknowledgement by peers to the join message.
+		System.out.println("Executing Ack join");
 		DistributedChat.addPeer(peerID);
 	}
 
