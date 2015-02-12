@@ -37,7 +37,7 @@ public class DistributedChat {
         	public void run() { 
         		try {         
         			ChatInterface stub = new Chat();
-					Naming.rebind("rmi://localhost:5000/" + ID, stub);
+					Naming.rebind("rmi://192.168.0.101:5000/" + ID, stub);
         		}
         		catch (Exception e) {}
         	}});
@@ -77,6 +77,7 @@ public class DistributedChat {
        	    	DatagramPacket packet = new DatagramPacket(buf, buf.length, MulticastAddress, Port);
             	try {
             		mSocket.send(packet);
+            		System.out.println("Sending Join messages");
             	} catch (IOException e) {}
 
 			}
@@ -107,8 +108,10 @@ public class DistributedChat {
 
         while(true) {
 	        try {
+	        	System.out.println("Listening");
 	       		mSocket.receive(multMessage); 
 	       		String multMessageStr = new String(multMessage.getData(), 0, multMessage.getLength());
+	       		System.out.println("Recvd message " + multMessageStr);
 	       		String[] fields = multMessageStr.split("$");
 	       		if(fields[0].equals("JOIN")) {
 	       			// New Peer joining. Update peer list.
@@ -140,7 +143,7 @@ public class DistributedChat {
 		//Send message to all peers using RMI.
 		for (int i = 0; i < peers.size(); i++) {
 			try {
-				ChatInterface c = (ChatInterface) Naming.lookup("rmi://localhost:5000/" + peers.get(i));
+				ChatInterface c = (ChatInterface) Naming.lookup("rmi://192.168.0.101:5000/" + peers.get(i));
 				c.getMessage(message, msgID, ID);
 			} catch (Exception e) {
 				// Peer not accessible
