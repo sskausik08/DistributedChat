@@ -12,6 +12,7 @@ public class DistributedChat {
 	InetAddress MulticastAddress;
 	int Port = 9999;
 	int DatagramSize = 20;
+	Thread listenThread;
 
 	protected static Vector<Integer> peers = new Vector<Integer>();
 	
@@ -21,10 +22,20 @@ public class DistributedChat {
 
 		try {
 			mSocket = new MulticastSocket(Port);
-	        MulticastAddress = InetAddress.getByName("224.0.55.55");
-		    mSocket.joinGroup(MulticastAddress);
 		} catch (Exception e) {
-
+			System.err.println("Exception in 1");
+		}
+	    try { 
+			MulticastAddress = InetAddress.getByName("225.50.4.1");
+		} catch (java.net.UnknownHostException e) {
+			System.err.println("Unknown Host Reported");
+		}
+		try{
+			SocketAddress socketAddress = new InetSocketAddress(MulticastAddress, 9999);
+			NetworkInterface networkInterface = NetworkInterface.getByName("en0");
+			mSocket.joinGroup(socketAddress, networkInterface);
+		} catch (IOException e) {
+			System.err.println("Unable to join Group");
 		}
 	}
 
@@ -44,12 +55,12 @@ public class DistributedChat {
 
         rmiThread.start();	
 
-        Thread listenThread = new Thread(new Runnable() {           
+        listenThread = new Thread(new Runnable() {           
         	public void run() { 
         		listenForPeers();
         	}});
 
-        listenThread.start();
+        
 
 		while(true) {
 			System.out.print("#");
@@ -63,7 +74,8 @@ public class DistributedChat {
        	    	DatagramPacket packet = new DatagramPacket(buf, buf.length, MulticastAddress, Port);
             	try {
             		mSocket.send(packet);
-            	} catch (IOException e) {}
+            	} catch (IOException e) {
+            	}
 
           		// Exit the chat client;
 				return;
@@ -78,6 +90,9 @@ public class DistributedChat {
             	try {
             		mSocket.send(packet);
             		System.out.println("Sending Join messages");
+
+            		//Start Listening Now
+            		listenThread.start();
             	} catch (IOException e) {}
 
 			}
