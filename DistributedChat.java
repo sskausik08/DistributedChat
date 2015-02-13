@@ -6,19 +6,19 @@ import java.rmi.registry.*;
 
 public class DistributedChat {
 
-	int ID;
+	String ID;
 	MulticastSocket mSocket = null; // Multicast Socket for sending the join and leave messages.
 	Scanner inputSc ;
 	InetAddress MulticastAddress;
 	int Port = 9999;
-	int DatagramSize = 20;
+	int DatagramSize = 256;
 	Thread listenThread;
 	Thread rmiThread;
 	String IP;
 	
 
 	protected static Vector<Integer> peers = new Vector<Integer>();
-	public static Map<Integer,String> peersIP;
+	public static Map<String, String> peersIP;
 	
 	static int largest_agreed_seq;
 	static int largest_proposed_seq;
@@ -28,13 +28,13 @@ public class DistributedChat {
 	public static SortedMap<Integer, Integer> seq_id_map;
 	public static SortedMap<Integer, String> delivery_map;
 
-	DistributedChat(int id) { 
+	DistributedChat(String id) { 
 
 		msg_id_map = new HashMap<Integer, String>();
 		seq_id_map = new TreeMap<Integer, Integer>(); 
 		delivery_map = new TreeMap<Integer, String>();
 
-		peersIP = new HashMap<Integer, String>();
+		peersIP = new HashMap<String, String>();
 
 		ID = id;
 		inputSc = new Scanner(System.in);
@@ -52,7 +52,7 @@ public class DistributedChat {
 				if(!ia.isLinkLocalAddress()) {
 		                //System.out.println("IP: " + ia.getHostAddress());
 					IP = ia.getHostAddress().toString();
-					System.out.println(IP);
+					//System.out.println(IP);
 				}
 			}
 
@@ -61,7 +61,7 @@ public class DistributedChat {
 	}
 
 	public static void main(String[] args) throws IOException {	
-		new DistributedChat(Integer.parseInt(args[0])).run();
+		new DistributedChat(args[0]).run();
 	}
 
 	public void run() throws IOException {
@@ -99,7 +99,7 @@ public class DistributedChat {
             	}
 
           		// Exit the chat client;
-				exit();
+				System.exit(0);
 			}
 			else if(cmd.equals("Control join")){
 				// Creating the multicast socket
@@ -130,7 +130,7 @@ public class DistributedChat {
        	    	DatagramPacket packet = new DatagramPacket(buf, buf.length, MulticastAddress, Port);
             	try {
             		mSocket.send(packet);
-            		System.out.println("Sending Join messages");
+            		//System.out.println("Sending Join messages");
 
             		//Start Listening Now
             		listenThread.start();
@@ -139,27 +139,33 @@ public class DistributedChat {
 			}
 			else if(cmd.split(" ")[0].equals("Reply")){
 				// Reply
-				System.out.println("Reply");
-				String message = cmd.split(" ")[1];
+				//System.out.println("Reply");
+				String message = cmd.split(" ", 2)[1];
 
 				String tohash = ID+": "+message;
 				int mid = tohash.hashCode();
 
 				int seq_num = 0;
-				for (int i =0 ; i < peers.size() ; i++){
-					try {
+
+				Set<String> set = peersIP.keySet();
+
+				for (String s : set) {
+    				try {
 						int val;
-						ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(peers.get(i)) + ":5000/" + peers.get(i));
+						ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(s) + ":5000/" + s);
 						val = c.sendInitialMessage(tohash,mid);
 						seq_num = Math.max(seq_num, val);
 					}
 					catch(Exception e){ // Peer not accessible 
 						System.err.println("Some Exception");
 					}
+
 				}
-				for (int i=0; i < peers.size() ; i++){
+
+				set = peersIP.keySet();
+				for (String s : set) {
 					try{
-						ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(peers.get(i)) + ":5000/" + peers.get(i));
+						ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(s) + ":5000/" + s);
 						c.sendFinalMessage(mid,seq_num);
 					}catch(Exception e){
 						System.err.println("Some Exception");
@@ -170,7 +176,38 @@ public class DistributedChat {
 			}
 			else if(cmd.split(" ")[0].equals("ReplyTo")){
 				// ReplyTo
-				System.out.println("ReplyTo");
+				//System.out.println("ReplyTo");
+				String message = cmd.split(" ", 3)[2];
+
+				String tohash = ID+": "+message;
+				int mid = tohash.hashCode();
+
+				int seq_num = 0;
+
+				Set<String> set = peersIP.keySet();
+
+				for (String s : set) {
+    				try {
+						int val;
+						ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(s) + ":5000/" + s);
+						val = c.sendInitialMessage(tohash,mid);
+						seq_num = Math.max(seq_num, val);
+					}
+					catch(Exception e){ // Peer not accessible 
+						System.err.println("Some Exception");
+					}
+
+				}
+
+				set = peersIP.keySet();
+				for (String s : set) {
+					try{
+						ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(s) + ":5000/" + s);
+						c.sendFinalMessage(mid,seq_num);
+					}catch(Exception e){
+						System.err.println("Some Exception");
+					}
+				}
 
 			}
 			else {
@@ -180,7 +217,7 @@ public class DistributedChat {
 	}
 
 	public void listenForPeers() {
-		byte[] buf = new byte[20];
+		byte[] buf = new byte[256];
         DatagramPacket multMessage = new DatagramPacket(buf, buf.length);
       
         // try {
@@ -189,19 +226,22 @@ public class DistributedChat {
 
         while(true) {
 	        try {
-	        	System.out.println("Listening");
+	        	//System.out.println("Listening");
 	       		mSocket.receive(multMessage); 
 	       		String multMessageStr = new String(multMessage.getData(), 0, multMessage.getLength());
-	       		System.out.println("Recvd message " + multMessageStr);
+	       		//System.out.println("Recvd message " + multMessageStr);
 	       		String[] fields = multMessageStr.split(":");
 	       		if(fields[0].equals("JOIN")) {
 	       			// New Peer joining. Update peer list.
-	       			int id = Integer.parseInt(fields[1]);
-	       			if(id==ID) {} //Ignore
+	       			String id = fields[1];
+	
+	       			if(ID.equals(id)) {} //Ignore
 	       			else {
-		       				addPeer(id, fields[2]);
+	       				System.out.println(id + " has joined the chat.");
+	       				System.out.print("#");
+		       			addPeer(id, fields[2]);
 		       			try{
-		       				ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(Integer.parseInt(fields[1])) + ":5000/" + Integer.parseInt(fields[1]));	
+		       				ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(fields[1]) + ":5000/" + fields[1]);	
 		       				c.ackJoin(ID, IP);
 		       			} catch (Exception e) {
 							// Peer not accessible
@@ -211,38 +251,32 @@ public class DistributedChat {
 	       		if(fields[0].equals("LEAVE")) {
 	       			//  Peer Leaving. Update peer list.
 
+	       			String id = fields[1];
+
+	       			if(ID.equals(id)) {} //Ignore
+	       			else {
+	       				System.out.println(id + " has left the chat.");
+	       				System.out.print("#");
+	       				removePeer(id);
+	       			}
 	       		}
 	       	}
 	       	catch (IOException e) {}
 	    }
 	}
 
-	public static void displayMessage(String message, int peerID) {
-		System.out.println(peerID + ":" + message);
-	}
 
-	public static void addPeer(int peerID, String ip) {
-		System.out.println("Adding peer" + peerID);
-		peers.add(peerID);
+	public static void addPeer(String peerID, String ip) {
+		//System.out.println("Adding peer" + peerID);
 		peersIP.put(peerID, ip);
 	}
 
-	public void reply(String message) {
-		// Decide on message ID 
-
-		int msgID = 8;
-
-		//Send message to all peers using RMI.
-		for (int i = 0; i < peers.size(); i++) {
-			try {
-				ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(peers.get(i)) + ":5000/" + peers.get(i));
-				c.getMessage(message, msgID, ID);
-			} catch (Exception e) {
-				// Peer not accessible
-			}
-
-		}
+	public static void removePeer(String peerID) {
+		peersIP.remove(peerID);
 	}
+
+
+
 
 	public static int processInitial(String message,int messageId){
 		msg_id_map.put(messageId,message);
@@ -256,11 +290,9 @@ public class DistributedChat {
 		seq_id_map.remove(messageId);
 		seq_id_map.put(messageId,seqNo);
 		delivery_map.put(seqNo, msg_id_map.get(messageId));
-		System.out.println("#" + msg_id_map.get(messageId));
+		System.out.println(msg_id_map.get(messageId));
+		System.out.print("#");
 		return 0;
 	}
 
-	public void exit() {
-		// Stop threads.
-	}
 }

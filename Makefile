@@ -1,7 +1,7 @@
 all: compile
 
 compile: 
-	@javac *.java
+	@javac *.java 
 	@rmic Chat
 
 clean:
