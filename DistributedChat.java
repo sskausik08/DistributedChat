@@ -14,10 +14,11 @@ public class DistributedChat {
 	int DatagramSize = 20;
 	Thread listenThread;
 	Thread rmiThread;
-
+	String IP;
 	
 
 	protected static Vector<Integer> peers = new Vector<Integer>();
+	public static Map<Integer,String> peersIP;
 	
 	static int largest_agreed_seq;
 	static int largest_proposed_seq;
@@ -33,11 +34,30 @@ public class DistributedChat {
 		seq_id_map = new TreeMap<Integer, Integer>(); 
 		delivery_map = new TreeMap<Integer, String>();
 
+		peersIP = new HashMap<Integer, String>();
+
 		ID = id;
 		inputSc = new Scanner(System.in);
 
 		largest_agreed_seq = 0;
 		largest_proposed_seq = 0;
+
+		try{
+
+			NetworkInterface ni = NetworkInterface.getByName("en0");
+			Enumeration<InetAddress> inetAddresses =  ni.getInetAddresses();
+
+			while(inetAddresses.hasMoreElements()) {
+				InetAddress ia = inetAddresses.nextElement();
+				if(!ia.isLinkLocalAddress()) {
+		                //System.out.println("IP: " + ia.getHostAddress());
+					IP = ia.getHostAddress().toString();
+					System.out.println(IP);
+				}
+			}
+
+		} catch(Exception e){	
+		}
 	}
 
 	public static void main(String[] args) throws IOException {	
@@ -49,7 +69,7 @@ public class DistributedChat {
         	public void run() { 
         		try {         
         			ChatInterface stub = new Chat();
-					Naming.rebind("rmi://localhost:5000/" + ID, stub);
+					Naming.rebind("rmi://" + IP + ":5000/" + ID, stub);
         		}
         		catch (Exception e) {}
         	}});
@@ -104,7 +124,7 @@ public class DistributedChat {
 
 
 				// Joining the chat. Multicast ID to Peers.
-				String joinMessage = "JOIN:" + ID;
+				String joinMessage = "JOIN:" + ID + ":" + IP;
 				byte[] buf = new byte[DatagramSize];
            		buf = joinMessage.getBytes();
        	    	DatagramPacket packet = new DatagramPacket(buf, buf.length, MulticastAddress, Port);
@@ -129,7 +149,7 @@ public class DistributedChat {
 				for (int i =0 ; i < peers.size() ; i++){
 					try {
 						int val;
-						ChatInterface c = (ChatInterface) Naming.lookup("rmi://localhost:5000/" + peers.get(i));
+						ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(peers.get(i)) + ":5000/" + peers.get(i));
 						val = c.sendInitialMessage(tohash,mid);
 						seq_num = Math.max(seq_num, val);
 					}
@@ -139,7 +159,7 @@ public class DistributedChat {
 				}
 				for (int i=0; i < peers.size() ; i++){
 					try{
-						ChatInterface c = (ChatInterface) Naming.lookup("rmi://localhost:5000/" + peers.get(i));
+						ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(peers.get(i)) + ":5000/" + peers.get(i));
 						c.sendFinalMessage(mid,seq_num);
 					}catch(Exception e){
 						System.err.println("Some Exception");
@@ -179,10 +199,10 @@ public class DistributedChat {
 	       			int id = Integer.parseInt(fields[1]);
 	       			if(id==ID) {} //Ignore
 	       			else {
-		       				addPeer(id);
+		       				addPeer(id, fields[2]);
 		       			try{
-		       				ChatInterface c = (ChatInterface) Naming.lookup("rmi://localhost:5000/" + Integer.parseInt(fields[1]));	
-		       				c.ackJoin(ID);
+		       				ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(Integer.parseInt(fields[1])) + ":5000/" + Integer.parseInt(fields[1]));	
+		       				c.ackJoin(ID, IP);
 		       			} catch (Exception e) {
 							// Peer not accessible
 						}
@@ -201,9 +221,10 @@ public class DistributedChat {
 		System.out.println(peerID + ":" + message);
 	}
 
-	public static void addPeer(int peerID) {
+	public static void addPeer(int peerID, String ip) {
 		System.out.println("Adding peer" + peerID);
 		peers.add(peerID);
+		peersIP.put(peerID, ip);
 	}
 
 	public void reply(String message) {
@@ -214,7 +235,7 @@ public class DistributedChat {
 		//Send message to all peers using RMI.
 		for (int i = 0; i < peers.size(); i++) {
 			try {
-				ChatInterface c = (ChatInterface) Naming.lookup("rmi://localhost:5000/" + peers.get(i));
+				ChatInterface c = (ChatInterface) Naming.lookup("rmi://" + peersIP.get(peers.get(i)) + ":5000/" + peers.get(i));
 				c.getMessage(message, msgID, ID);
 			} catch (Exception e) {
 				// Peer not accessible
