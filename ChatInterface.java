@@ -11,4 +11,8 @@ public interface ChatInterface extends Remote {
 	public void ackJoin(int peerID) throws RemoteException; // Acknowledgement by peers to the join message.
 	
 	public void getMessage(String message, int msgID, int peerID) throws RemoteException;  // get Message from peer.
+
+	public int sendInitialMessage(String message, int messageId) throws RemoteException;
+
+	public void sendFinalMessage(int messageId, int seq_no) throws RemoteException;
 }

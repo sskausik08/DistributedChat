@@ -13,14 +13,31 @@ public class DistributedChat {
 	int Port = 9999;
 	int DatagramSize = 20;
 	Thread listenThread;
+	Thread rmiThread;
+
+	
 
 	protected static Vector<Integer> peers = new Vector<Integer>();
 	
+	static int largest_agreed_seq;
+	static int largest_proposed_seq;
+
+	
+	public static Map<Integer,String> msg_id_map;
+	public static SortedMap<Integer, Integer> seq_id_map;
+	public static SortedMap<Integer, String> delivery_map;
+
 	DistributedChat(int id) { 
+
+		msg_id_map = new HashMap<Integer, String>();
+		seq_id_map = new TreeMap<Integer, Integer>(); 
+		delivery_map = new TreeMap<Integer, String>();
+
 		ID = id;
 		inputSc = new Scanner(System.in);
 
-		
+		largest_agreed_seq = 0;
+		largest_proposed_seq = 0;
 	}
 
 	public static void main(String[] args) throws IOException {	
@@ -28,11 +45,11 @@ public class DistributedChat {
 	}
 
 	public void run() throws IOException {
-		Thread rmiThread = new Thread(new Runnable() {           
+		rmiThread = new Thread(new Runnable() {           
         	public void run() { 
         		try {         
         			ChatInterface stub = new Chat();
-					Naming.rebind("rmi://192.168.0.101:5000/" + ID, stub);
+					Naming.rebind("rmi://localhost:5000/" + ID, stub);
         		}
         		catch (Exception e) {}
         	}});
@@ -62,7 +79,7 @@ public class DistributedChat {
             	}
 
           		// Exit the chat client;
-				return;
+				exit();
 			}
 			else if(cmd.equals("Control join")){
 				// Creating the multicast socket
@@ -103,6 +120,32 @@ public class DistributedChat {
 			else if(cmd.split(" ")[0].equals("Reply")){
 				// Reply
 				System.out.println("Reply");
+				String message = cmd.split(" ")[1];
+
+				String tohash = ID+": "+message;
+				int mid = tohash.hashCode();
+
+				int seq_num = 0;
+				for (int i =0 ; i < peers.size() ; i++){
+					try {
+						int val;
+						ChatInterface c = (ChatInterface) Naming.lookup("rmi://localhost:5000/" + peers.get(i));
+						val = c.sendInitialMessage(tohash,mid);
+						seq_num = Math.max(seq_num, val);
+					}
+					catch(Exception e){ // Peer not accessible 
+						System.err.println("Some Exception");
+					}
+				}
+				for (int i=0; i < peers.size() ; i++){
+					try{
+						ChatInterface c = (ChatInterface) Naming.lookup("rmi://localhost:5000/" + peers.get(i));
+						c.sendFinalMessage(mid,seq_num);
+					}catch(Exception e){
+						System.err.println("Some Exception");
+					}
+				}
+				
 
 			}
 			else if(cmd.split(" ")[0].equals("ReplyTo")){
@@ -111,8 +154,7 @@ public class DistributedChat {
 
 			}
 			else {
-				// Invalid cmd.
-				return;
+				// Invalid cmd. Ignore.
 			}
 		}
 	}
@@ -139,7 +181,7 @@ public class DistributedChat {
 	       			else {
 		       				addPeer(id);
 		       			try{
-		       				ChatInterface c = (ChatInterface) Naming.lookup("rmi://192.168.0.101:5000/" + Integer.parseInt(fields[1]));	
+		       				ChatInterface c = (ChatInterface) Naming.lookup("rmi://localhost:5000/" + Integer.parseInt(fields[1]));	
 		       				c.ackJoin(ID);
 		       			} catch (Exception e) {
 							// Peer not accessible
@@ -172,7 +214,7 @@ public class DistributedChat {
 		//Send message to all peers using RMI.
 		for (int i = 0; i < peers.size(); i++) {
 			try {
-				ChatInterface c = (ChatInterface) Naming.lookup("rmi://192.168.0.101:5000/" + peers.get(i));
+				ChatInterface c = (ChatInterface) Naming.lookup("rmi://localhost:5000/" + peers.get(i));
 				c.getMessage(message, msgID, ID);
 			} catch (Exception e) {
 				// Peer not accessible
@@ -181,4 +223,23 @@ public class DistributedChat {
 		}
 	}
 
+	public static int processInitial(String message,int messageId){
+		msg_id_map.put(messageId,message);
+		largest_proposed_seq = Math.max(largest_agreed_seq,largest_proposed_seq)+1;
+		seq_id_map.put(messageId,largest_proposed_seq);
+		return largest_proposed_seq;
+	}
+	
+	public static int processFinal(int messageId, int seqNo){
+		largest_agreed_seq = Math.max(seqNo, largest_agreed_seq);
+		seq_id_map.remove(messageId);
+		seq_id_map.put(messageId,seqNo);
+		delivery_map.put(seqNo, msg_id_map.get(messageId));
+		System.out.println("#" + msg_id_map.get(messageId));
+		return 0;
+	}
+
+	public void exit() {
+		// Stop threads.
+	}
 }
