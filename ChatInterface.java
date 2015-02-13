@@ -8,9 +8,7 @@ import java.rmi.RemoteException;
  */
 public interface ChatInterface extends Remote {
 	
-	public void ackJoin(int peerID, String IP) throws RemoteException; // Acknowledgement by peers to the join message.
-	
-	public void getMessage(String message, int msgID, int peerID) throws RemoteException;  // get Message from peer.
+	public void ackJoin(String peerID, String IP) throws RemoteException; // Acknowledgement by peers to the join message.
 
 	public int sendInitialMessage(String message, int messageId) throws RemoteException;
 
